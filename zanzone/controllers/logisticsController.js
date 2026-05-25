@@ -344,7 +344,10 @@ exports.updateDeliveryStatus = async (req, res) => {
             cs = companyScope(req);
         }
         values.push(req.params.id, ...cs.params);
-        await db.query(`UPDATE deliveries SET ${sets.join(', ')} WHERE id = ?${cs.clause}`, values);
+        const [result] = await db.query(`UPDATE deliveries SET ${sets.join(', ')} WHERE id = ?${cs.clause}`, values);
+        if (!result || result.affectedRows === 0) {
+            return errorResponse(res, 'Delivery not found or not permitted to update.', 404);
+        }
 
         // Sync assignment to order if provided
         if (assigned_driver) {

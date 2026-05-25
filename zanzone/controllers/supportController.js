@@ -63,9 +63,22 @@ exports.updateTicketStatus = async (req, res) => {
 
         if (sets.length === 0) return errorResponse(res, 'No fields to update.', 400);
 
-        const cs = companyScope(req);
+        const roleNorm = String(req.user?.role || '').toLowerCase().replace(/\s+/g, '_');
+
+        // Allow customers to update only tickets they submitted; admins use company scoping
+        let cs;
+        if (roleNorm === 'customer') {
+            cs = { clause: ' AND submitted_by = ?', params: [req.user.id] };
+        } else {
+            cs = companyScope(req);
+        }
+
         values.push(req.params.id, ...cs.params);
-        await db.query(`UPDATE support_tickets SET ${sets.join(', ')} WHERE id = ?${cs.clause}`, values);
+        const [result] = await db.query(`UPDATE support_tickets SET ${sets.join(', ')} WHERE id = ?${cs.clause}`, values);
+
+        if (!result || result.affectedRows === 0) {
+            return errorResponse(res, 'Ticket not found or no permission to update.', 404);
+        }
 
         return successResponse(res, { id: req.params.id, status }, 'Ticket updated.');
     } catch (err) {

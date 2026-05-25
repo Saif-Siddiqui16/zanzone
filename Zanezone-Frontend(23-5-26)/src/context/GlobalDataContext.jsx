@@ -577,6 +577,7 @@ export const GlobalDataProvider = ({ children }) => {
     const [logs, setLogs] = useState([]);
     const [fleet, setFleet] = useState([]);
     const [supportTickets, setSupportTickets] = useState([]);
+    const [rawSupportTickets, setRawSupportTickets] = useState([]);
     const [projects, setProjects] = useState([]);
     const [missions, setMissions] = useState([]);
     const [staffAssignments, setStaffAssignments] = useState([]);
@@ -641,6 +642,16 @@ export const GlobalDataProvider = ({ children }) => {
 
         return dataArray;
     }, [currentUser]);
+
+    // Re-apply filtering for fetched tickets when user becomes available
+    React.useEffect(() => {
+        if (!Array.isArray(rawSupportTickets)) return;
+        if (!currentUser) {
+            setSupportTickets([]);
+            return;
+        }
+        setSupportTickets(filterDataForCurrentUser(rawSupportTickets));
+    }, [currentUser, rawSupportTickets, filterDataForCurrentUser]);
 
     const addLog = (log) => {
         setLogs(prev => [{
@@ -1377,6 +1388,11 @@ export const GlobalDataProvider = ({ children }) => {
                 api.get('/support/guest-requests').catch(e => ({ data: [] }))
             ]);
             if (tickets.data?.success) {
+                const formatStatus = (s) => {
+                    if (!s) return 'Open';
+                    return String(s).split(/[_\s]+/).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+                };
+
                 const mapped = tickets.data.data.map(t => {
                     let msgs = [];
                     if (t.messages) {
@@ -1395,6 +1411,10 @@ export const GlobalDataProvider = ({ children }) => {
                     return {
                         id: `TKT-${String(t.id).padStart(3, '0')}`,
                         db_id: t.id,
+                        // preserve original backend identification fields to satisfy global filters
+                        submitted_by: t.submitted_by ?? null,
+                        created_by: t.submitted_by ?? t.created_by ?? null,
+                        user_id: t.submitted_by ?? t.user_id ?? null,
                         clientName: t.submitted_by_name || 'System User',
                         clientId: t.client_id ?? t.company_id ?? null,
                         createdById: t.created_by ?? t.user_id ?? null,
@@ -1403,12 +1423,15 @@ export const GlobalDataProvider = ({ children }) => {
                         subject: t.subject,
                         category: t.category || 'General',
                         priority: t.priority ? t.priority.charAt(0).toUpperCase() + t.priority.slice(1) : 'Medium',
-                        status: t.status ? t.status.charAt(0).toUpperCase() + t.status.slice(1).replace('_', ' ') : 'Open',
+                        status: formatStatus(t.status),
                         date: t.created_at ? t.created_at.split('T')[0] : '',
                         messages: msgs
                     };
                 });
-                setSupportTickets(filterDataForCurrentUser(mapped));
+                setRawSupportTickets(mapped);
+                // If user already available, apply filter immediately; otherwise rely on effect to apply once currentUser is set
+                if (currentUser) setSupportTickets(filterDataForCurrentUser(mapped));
+                else setSupportTickets([]);
             }
             if (eventsData.data?.success) {
                 const mappedEvents = eventsData.data.data.map(e => ({
@@ -2633,6 +2656,7 @@ export const GlobalDataProvider = ({ children }) => {
                 company_id: del.company_id || null,
                 client_id: del.client_id || del.clientId || null,
                 customer_id: del.customer_id || del.customerId || null,
+                assigned_driver: del.assigned_driver || del.driverId || del.driver_id || null,
                 mission_type: ['Delivery', 'Pickup', 'Transfer', 'Chauffeur'].includes(del.missionType || del.mission_type) ? (del.missionType || del.mission_type) : 'Delivery',
                 route: del.location || del.route || '',
                 driver_name: del.driver || del.driver_name || '',
@@ -2742,10 +2766,11 @@ export const GlobalDataProvider = ({ children }) => {
                         await generateInvoiceFromOrder(matchingOrder);
                     }
                 }
+            } else {
+                await fetchOrders();
             }
         } catch (error) {
-            console.warn("Delivery status API failed, applying local update:", error?.response?.data || error?.message);
-            applyLocal();
+            console.error("Delivery status API failed:", error?.response?.data || error?.message);
         }
     };
 
