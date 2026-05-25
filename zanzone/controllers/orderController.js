@@ -329,7 +329,9 @@ exports.create = async (req, res) => {
             book_chauffeur,
             custom_request_category,
             concierge_member,
-            delivery_instructions
+            delivery_instructions,
+            pickup_location,
+            pickupLocation
         } = req.body;
         const hqCompanyId = normalizePositiveInt(process.env.DEFAULT_COMPANY_ID || 1);
         const roleNorm = String(req.user?.role || '').toLowerCase().trim().replace(/\s+/g, '_');
@@ -515,8 +517,8 @@ exports.create = async (req, res) => {
         const [result] = await db.query(
             `INSERT INTO orders
              (company_id, customer_id, vendor_id, created_by, type, items, notes,
-              delivery_instructions, location, total_amount, status, current_stage, order_date, due_date)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              delivery_instructions, location, total_amount, status, current_stage, order_date, due_date, pickup_location)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 companyId, resolvedCustomerId, resolvedVendorId, req.user.id,
                 type || 'Custom Order', JSON.stringify(parsedItems), notesMerged,
@@ -524,7 +526,8 @@ exports.create = async (req, res) => {
                 finalDeliveryAddress,
                 totalAmount, initialStatus, initialStage,
                 orderDateVal || new Date().toISOString().slice(0, 10),
-                dueDateVal || null
+                dueDateVal || null,
+                pickup_location || pickupLocation || null
             ]
         );
 
@@ -568,8 +571,8 @@ exports.create = async (req, res) => {
         if (initialStage === 'logistics') {
             await db.query(
                 `INSERT INTO deliveries (company_id, order_id, mission_type, status, pickup_location, drop_location, package_details, delivery_date) 
-                 VALUES (?, ?, 'Delivery', 'pending', 'Warehouse / HQ', ?, ?, ?)`,
-                [companyId, orderId, finalDeliveryAddress || 'Customer Address', JSON.stringify(parsedItems), toMysqlDateOnly(orderDateVal)]
+                 VALUES (?, ?, 'Delivery', 'pending', ?, ?, ?, ?)`,
+                [companyId, orderId, pickup_location || pickupLocation || 'Warehouse / HQ', finalDeliveryAddress || 'Customer Address', JSON.stringify(parsedItems), toMysqlDateOnly(orderDateVal)]
             );
 
             await createNotification({
@@ -609,7 +612,9 @@ exports.update = async (req, res) => {
             'due_date',
             'order_date',
             'client_id',
-            'company_id'
+            'company_id',
+            'pickup_location',
+            'pickupLocation'
         ];
         const fkFields = ['customer_id', 'vendor_id', 'client_id', 'company_id'];
         const sets = [];
@@ -619,7 +624,7 @@ exports.update = async (req, res) => {
             if (!allowedFields.includes(key)) continue;
             // Convert empty strings to null for foreign key fields
             const cleanVal = (fkFields.includes(key) && (val === '' || val === undefined)) ? null : val;
-            const dbKey = key === 'client_id' ? 'customer_id' : key;
+            const dbKey = key === 'client_id' ? 'customer_id' : (key === 'pickupLocation' ? 'pickup_location' : key);
             if (dbKey === 'company_id' && cleanVal != null) {
                 const resolvedCompanyId = await resolveValidCompanyId({
                     requestedCompanyId: normalizePositiveInt(cleanVal),
@@ -770,10 +775,11 @@ exports.assignToStage = async (req, res) => {
                 try {
                     await db.query(
                         `INSERT INTO deliveries (company_id, order_id, mission_type, status, pickup_location, drop_location, package_details, delivery_date, delivery_instructions, delivery_fee)
-                         VALUES (?, ?, 'Delivery', 'pending', 'Warehouse / HQ', ?, ?, ?, ?, ?)`,
+                         VALUES (?, ?, 'Delivery', 'pending', ?, ?, ?, ?, ?, ?)`,
                         [
                             order.company_id,
                             id,
+                            order.pickup_location || 'Warehouse / HQ',
                             dropAddr,
                             JSON.stringify(parsedItems),
                             orderDay,
@@ -788,8 +794,8 @@ exports.assignToStage = async (req, res) => {
                     } else if (insErr.code === 'ER_BAD_FIELD_ERROR') {
                         await db.query(
                             `INSERT INTO deliveries (company_id, order_id, mission_type, status, pickup_location, drop_location, package_details, delivery_date)
-                             VALUES (?, ?, 'Delivery', 'pending', 'Warehouse / HQ', ?, ?, ?)`,
-                            [order.company_id, id, dropAddr, JSON.stringify(parsedItems), orderDay]
+                             VALUES (?, ?, 'Delivery', 'pending', ?, ?, ?, ?)`,
+                            [order.company_id, id, order.pickup_location || 'Warehouse / HQ', dropAddr, JSON.stringify(parsedItems), orderDay]
                         );
                     } else if (
                         insErr.code === 'WARN_DATA_TRUNCATED' ||

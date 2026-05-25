@@ -42,7 +42,7 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                 const ct = String(c.client_type || c.clientType || '').trim().toLowerCase();
                 const tt = String(c.tenant_type || c.tenantType || '').trim().toLowerCase();
                 const role = String(c.role || c.user_role || '').trim().toLowerCase();
-                return ct === 'personal' || tt === 'personal' || role === 'customer';
+                return ct === 'personal' || ct === 'individual' || tt === 'personal' || role === 'customer';
             })
             .map((c) => ({
                 id: `client_${c.id}`,

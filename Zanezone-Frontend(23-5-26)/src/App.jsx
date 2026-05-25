@@ -141,7 +141,7 @@ const DashboardSelector = ({ role }) => {
     case 'client': return <ClientDashboard />;
     case 'saas_client': return <ClientDashboard />;
     case 'customer': return <ClientDashboard />;
-    case 'admin': return <ClientDashboard />;
+    case 'admin': return <Dashboard />;
     case 'staff': return <EmployeePortal />;
     default: return <Dashboard />;
   }

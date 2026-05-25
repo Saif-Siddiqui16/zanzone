@@ -2654,8 +2654,6 @@ export const GlobalDataProvider = ({ children }) => {
             const reqData = {
                 order_id: sanitizedOrderId,
                 company_id: del.company_id || null,
-                client_id: del.client_id || del.clientId || null,
-                customer_id: del.customer_id || del.customerId || null,
                 assigned_driver: del.assigned_driver || del.driverId || del.driver_id || null,
                 mission_type: ['Delivery', 'Pickup', 'Transfer', 'Chauffeur'].includes(del.missionType || del.mission_type) ? (del.missionType || del.mission_type) : 'Delivery',
                 route: del.location || del.route || '',
