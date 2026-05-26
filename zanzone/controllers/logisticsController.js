@@ -17,6 +17,11 @@ async function resolveValidCompanyId(candidateId) {
     return rows.length ? normalized : null;
 }
 
+async function getDeliveryColumnSet() {
+    const [columns] = await db.query('SHOW COLUMNS FROM deliveries');
+    return new Set(columns.map((column) => column.Field));
+}
+
 // --- VEHICLES ---
 exports.getVehicles = async (req, res) => {
     try {
@@ -95,10 +100,19 @@ exports.deleteVehicle = async (req, res) => {
 exports.getDeliveries = async (req, res) => {
     try {
         const roleNorm = String(req.user?.role || '').toLowerCase().trim().replace(/\s+/g, '_');
+        const deliveryColumns = await getDeliveryColumnSet();
+        const hasAssignedDriver = deliveryColumns.has('assigned_driver');
+        const hasClientId = deliveryColumns.has('client_id');
+        const hasCreatedBy = deliveryColumns.has('created_by');
+        const assignedDriverSelect = hasAssignedDriver ? 'd.assigned_driver as driverId' : 'NULL as driverId';
+        const userJoin = hasAssignedDriver ? 'LEFT JOIN users u ON d.assigned_driver = u.id' : 'LEFT JOIN users u ON 1=0';
+        const clientNameSelect = hasClientId ? 'COALESCE(cust.name, comp.name) as client_name,' : 'comp.name as client_name,';
+        const customerJoin = hasClientId ? 'LEFT JOIN customers cust ON d.client_id = cust.id' : 'LEFT JOIN customers cust ON 1=0';
         if (roleNorm === 'super_admin' || roleNorm === 'superadmin') {
             const [rows] = await db.query(
                 `SELECT d.*, 
-                        d.assigned_driver as driverId,
+                        ${assignedDriverSelect},
+                        ${clientNameSelect}
                         d.vehicle_id as vehicleId,
                         v.plate_number as vehicle_plate,
                         COALESCE(u.name, d.driver_name) as driver_name,
@@ -108,7 +122,9 @@ exports.getDeliveries = async (req, res) => {
                         o.total_amount as order_total_amount
                  FROM deliveries d
                  LEFT JOIN vehicles v ON d.vehicle_id = v.id
-                 LEFT JOIN users u ON d.assigned_driver = u.id
+                 ${userJoin}
+                 ${customerJoin}
+                 LEFT JOIN companies comp ON d.company_id = comp.id
                  LEFT JOIN orders o ON d.order_id = o.id
                  ORDER BY d.created_at DESC`
             );
@@ -120,7 +136,8 @@ exports.getDeliveries = async (req, res) => {
 
         let query = `
             SELECT d.*, 
-                   d.assigned_driver as driverId,
+                   ${assignedDriverSelect},
+                   ${clientNameSelect}
                    d.vehicle_id as vehicleId,
                    v.plate_number as vehicle_plate,
                    COALESCE(u.name, d.driver_name) as driver_name,
@@ -130,15 +147,26 @@ exports.getDeliveries = async (req, res) => {
                    o.total_amount as order_total_amount
             FROM deliveries d
             LEFT JOIN vehicles v ON d.vehicle_id = v.id
-            LEFT JOIN users u ON d.assigned_driver = u.id
+            ${userJoin}
+            ${customerJoin}
+            LEFT JOIN companies comp ON d.company_id = comp.id
             LEFT JOIN orders o ON d.order_id = o.id
             WHERE 1=1
         `;
         let params = [];
 
         if (roleNorm === 'customer') {
-            query += ` AND (d.client_id = ? OR d.created_by = ?)`;
-            params.push(req.user.id, req.user.id);
+            const customerClauses = ['o.created_by = ?'];
+            params.push(req.user.id);
+            if (hasClientId) {
+                customerClauses.push('d.client_id = ?');
+                params.push(req.user.id);
+            }
+            if (hasCreatedBy) {
+                customerClauses.push('d.created_by = ?');
+                params.push(req.user.id);
+            }
+            query += ` AND (${customerClauses.join(' OR ')})`;
         } else if (isManagementRole && isHQStaff) {
             // HQ Management sees everything
         } else {
@@ -149,7 +177,7 @@ exports.getDeliveries = async (req, res) => {
         }
 
         const isStaffOnly = ['staff', 'field_staff', 'driver'].includes(roleNorm);
-        if (isStaffOnly) {
+        if (isStaffOnly && hasAssignedDriver) {
             query += ` AND (d.assigned_driver = ? OR d.assigned_driver IS NULL)`;
             params.push(req.user.id);
         }
@@ -234,58 +262,35 @@ exports.createDelivery = async (req, res) => {
         const finalClientId = req.body.client_id || req.body.customer_id || (req.user?.role === 'customer' ? req.user.id : null);
         const finalCreatedBy = req.body.created_by || req.user?.id || null;
 
-        let result;
-        try {
-            [result] = await db.query(
-                `INSERT INTO deliveries (company_id, order_id, mission_type, route, driver_name, plate_number, package_details, pickup_location, drop_location, passenger_info, delivery_date, pickup_time, status, assigned_driver, delivery_instructions, delivery_fee, client_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    companyId,
-                    safeOrderId,
-                    safeMissionType,
-                    route || null,
-                    driver_name || null,
-                    plate_number || null,
-                    typeof package_details === 'string' ? package_details : JSON.stringify(package_details || []),
-                    pickup_location || null,
-                    drop_location || null,
-                    typeof passenger_info === 'string' ? passenger_info : JSON.stringify(passenger_info || null),
-                    safeDeliveryDate,
-                    safePickupTime,
-                    status || 'pending',
-                    assigned_driver || null,
-                    instructVal,
-                    Number.isFinite(feeVal) ? feeVal : null,
-                    finalClientId,
-                    finalCreatedBy
-                ]
-            );
-        } catch (insErr) {
-            if (insErr.code === 'ER_BAD_FIELD_ERROR') {
-                [result] = await db.query(
-                    `INSERT INTO deliveries (company_id, order_id, mission_type, route, driver_name, plate_number, package_details, pickup_location, drop_location, passenger_info, delivery_date, pickup_time, status, assigned_driver, client_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [
-                        companyId,
-                        safeOrderId,
-                        safeMissionType,
-                        route || null,
-                        driver_name || null,
-                        plate_number || null,
-                        typeof package_details === 'string' ? package_details : JSON.stringify(package_details || []),
-                        pickup_location || null,
-                        drop_location || null,
-                        typeof passenger_info === 'string' ? passenger_info : JSON.stringify(passenger_info || null),
-                        safeDeliveryDate,
-                        safePickupTime,
-                        status || 'pending',
-                        assigned_driver || null,
-                        finalClientId,
-                        finalCreatedBy
-                    ]
-                );
-            } else {
-                throw insErr;
-            }
-        }
+        const deliveryColumns = await getDeliveryColumnSet();
+        const insertCandidate = {
+            company_id: companyId,
+            order_id: safeOrderId,
+            mission_type: safeMissionType,
+            route: route || null,
+            driver_name: driver_name || null,
+            plate_number: plate_number || null,
+            package_details: typeof package_details === 'string' ? package_details : JSON.stringify(package_details || []),
+            pickup_location: pickup_location || null,
+            drop_location: drop_location || null,
+            passenger_info: typeof passenger_info === 'string' ? passenger_info : JSON.stringify(passenger_info || null),
+            delivery_date: safeDeliveryDate,
+            pickup_time: safePickupTime,
+            status: status || 'pending',
+            assigned_driver: assigned_driver || null,
+            delivery_instructions: instructVal,
+            delivery_fee: Number.isFinite(feeVal) ? feeVal : null,
+            client_id: finalClientId,
+            created_by: finalCreatedBy
+        };
+        const insertEntries = Object.entries(insertCandidate).filter(([key]) => deliveryColumns.has(key));
+        const insertColumns = insertEntries.map(([key]) => `\`${key}\``).join(', ');
+        const placeholders = insertEntries.map(() => '?').join(', ');
+        const values = insertEntries.map(([, value]) => value);
+        const [result] = await db.query(
+            `INSERT INTO deliveries (${insertColumns}) VALUES (${placeholders})`,
+            values
+        );
 
         // Notify on new delivery / chauffeur request (admin + concierge + logistics for VIP rides)
         const isChauffeur = (mission_type || '').toLowerCase() === 'chauffeur';
@@ -313,6 +318,7 @@ exports.createDelivery = async (req, res) => {
 exports.updateDeliveryStatus = async (req, res) => {
     try {
         const { status, vehicle_id, signature, driver_name, plate_number, assigned_driver, passenger_info, delivery_instructions } = req.body;
+        const deliveryColumns = await getDeliveryColumnSet();
         const sets = [];
         const values = [];
 
@@ -321,12 +327,12 @@ exports.updateDeliveryStatus = async (req, res) => {
         if (signature) { sets.push('signature = ?'); values.push(signature); }
         if (driver_name !== undefined) { sets.push('driver_name = ?'); values.push(driver_name); }
         if (plate_number !== undefined) { sets.push('plate_number = ?'); values.push(plate_number); }
-        if (assigned_driver !== undefined) { sets.push('assigned_driver = ?'); values.push(assigned_driver || null); }
+        if (assigned_driver !== undefined && deliveryColumns.has('assigned_driver')) { sets.push('assigned_driver = ?'); values.push(assigned_driver || null); }
         if (passenger_info !== undefined) {
             sets.push('passenger_info = ?');
             values.push(typeof passenger_info === 'string' ? passenger_info : JSON.stringify(passenger_info));
         }
-        if (delivery_instructions !== undefined) {
+        if (delivery_instructions !== undefined && deliveryColumns.has('delivery_instructions')) {
             sets.push('delivery_instructions = ?');
             values.push(delivery_instructions);
         }
@@ -353,8 +359,15 @@ exports.updateDeliveryStatus = async (req, res) => {
         if (assigned_driver) {
             const [del] = await db.query(`SELECT order_id FROM deliveries WHERE id = ?`, [req.params.id]);
             if (del.length > 0 && del[0].order_id) {
-                await db.query(`UPDATE orders SET assigned_to = ? WHERE id = ?`, [assigned_driver, del[0].order_id]);
+                await db.query(`UPDATE orders SET assigned_to = ?, status = 'logistics', current_stage = 'logistics' WHERE id = ?`, [assigned_driver, del[0].order_id]);
                 await db.query(`INSERT INTO order_flow_logs (order_id, stage, status, assigned_to, notes) VALUES (?, 'logistics', 'assigned', ?, 'Driver assigned to delivery mission')`, [del[0].order_id, assigned_driver]);
+            }
+        }
+
+        if (status === 'assigned' || status === 'en_route') {
+            const [del] = await db.query(`SELECT order_id FROM deliveries WHERE id = ?`, [req.params.id]);
+            if (del.length > 0 && del[0].order_id) {
+                await db.query(`UPDATE orders SET status = 'logistics', current_stage = 'logistics' WHERE id = ?`, [del[0].order_id]);
             }
         }
 
@@ -371,7 +384,7 @@ exports.updateDeliveryStatus = async (req, res) => {
                     await db.query(`INSERT INTO order_flow_logs (order_id, stage, status, notes) VALUES (?, 'completed', 'completed', 'Delivered via Logistics Mission')`, [del[0].order_id,]);
                 }
                 // Initialize payout hold: 48 hours from now
-                if (del[0].delivery_fee > 0) {
+                if (del[0].delivery_fee > 0 && deliveryColumns.has('payout_status') && deliveryColumns.has('payout_ready_at')) {
                     await db.query(`UPDATE deliveries SET payout_status = 'held', payout_ready_at = DATE_ADD(NOW(), INTERVAL 48 HOUR) WHERE id = ?`, [req.params.id]);
                 }
             }

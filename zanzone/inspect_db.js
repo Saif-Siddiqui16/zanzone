@@ -6,11 +6,11 @@ async function test() {
         const TableNames = tables.map(t => Object.values(t)[0]);
         console.log('Tables:', TableNames);
 
-        for (const table of ['purchase_requests', 'quotes', 'purchase_orders']) {
+        for (const table of ['purchase_requests', 'quotes', 'purchase_orders', 'vendors']) {
             if (TableNames.includes(table)) {
                 const [cols] = await db.query(`SHOW COLUMNS FROM ${table}`);
                 console.log(`\nTable: ${table}`);
-                cols.forEach(c => console.log(`- ${c.Field} (${c.Type})${c.Null === 'NO' ? ' NOT NULL' : ''}`));
+                cols.forEach(c => console.log(`- ${c.Field} (${c.Type})${c.Null === 'NO' ? ' NOT NULL' : ''} DEFAULT ${c.Default}`));
             }
         }
     } catch (err) {

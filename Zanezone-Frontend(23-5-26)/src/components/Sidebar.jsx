@@ -39,8 +39,8 @@ const menuItems = {
     { icon: FileText, label: 'Purchase Orders', path: '/dashboard/purchase-orders' },
     { icon: FileText, label: 'Invoices', path: '/dashboard/invoices' },
     { icon: BarChart3, label: 'Audit Log', path: '/dashboard/audits' },
-    { icon: Calendar, label: 'Leave & Absence', path: '/dashboard/leave' },
-    { icon: History, label: 'Pay & Records', path: '/dashboard/payroll' },
+    { icon: Calendar, label: 'Leave & Absence', path: '/dashboard?tab=leave' },
+    { icon: History, label: 'Pay & Records', path: '/dashboard?tab=pay' },
   ],
   logistics: [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },

@@ -30,7 +30,7 @@ function displayDeliveryStatus(raw) {
 }
 
 const Deliveries = () => {
-  const { deliveries, addDelivery, updateDelivery, deleteDelivery, users, fleet, fetchDeliveries, fetchStaff, hasMenuPermission, warehouses, fetchWarehouses, currentUser } = useData();
+  const { deliveries, addDelivery, updateDelivery, deleteDelivery, users, fleet, fetchDeliveries, fetchStaff, hasMenuPermission, warehouses, fetchWarehouses, currentUser, clients = [], fetchClients, customerUsers = [], fetchCustomerUsers } = useData();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [debounceSearch, setDebounceSearch] = useState('');
@@ -49,7 +49,49 @@ const Deliveries = () => {
     fetchDeliveries();
     fetchWarehouses();
     fetchStaff();
-  }, [fetchDeliveries, fetchWarehouses, fetchStaff]);
+    fetchClients();
+    fetchCustomerUsers({ include_all: true, include_client_role: true });
+  }, [fetchDeliveries, fetchWarehouses, fetchStaff, fetchClients, fetchCustomerUsers]);
+
+  const clientOptions = React.useMemo(() => {
+    const out = [];
+    const seen = new Set();
+    const add = (entry) => {
+      const key = entry.email ? `email:${entry.email.toLowerCase()}` : `${entry.source}:${entry.id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(entry);
+    };
+    (clients || []).forEach((c) => {
+      const type = String(c.client_type || c.clientType || c.account_type || c.accountType || c.role || '').toLowerCase();
+      const isCustomer = ['personal', 'direct', 'individual', 'customer'].some((x) => type.includes(x));
+      add({
+        id: c.id,
+        value: `${isCustomer ? 'customer' : 'company'}_${c.id}`,
+        label: c.companyName || c.business_name || c.name || c.email || `Client ${c.id}`,
+        email: c.email || '',
+        source: isCustomer ? 'customer' : 'company',
+        companyId: c.company_id || c.companyId || (!isCustomer ? c.id : (currentUser?.company_id || currentUser?.companyId || '')),
+        customerId: isCustomer ? c.id : '',
+        clientUserId: c.signup_user_id || ''
+      });
+    });
+    (customerUsers || []).forEach((u) => {
+      const role = String(u.role || '').toLowerCase();
+      const isCustomer = role === 'customer';
+      add({
+        id: u.id,
+        value: `${isCustomer ? 'user' : 'company'}_${u.id}`,
+        label: u.name || u.business_name || u.company_name || u.email || `Client ${u.id}`,
+        email: u.email || '',
+        source: isCustomer ? 'user' : 'company',
+        companyId: u.company_id || u.companyId || (currentUser?.company_id || currentUser?.companyId || ''),
+        customerId: u.customer_id || u.client_id || '',
+        clientUserId: isCustomer ? u.id : ''
+      });
+    });
+    return out.sort((a, b) => a.label.localeCompare(b.label));
+  }, [clients, customerUsers, currentUser?.company_id, currentUser?.companyId]);
 
   const portalRole = String(currentUser?.role || '').toLowerCase().replace(/\s+/g, '_');
   const canAssignDriverUi =
@@ -69,6 +111,11 @@ const Deliveries = () => {
     passengerInfo: { name: '', count: 1, phone: '' },
     packageDetails: { weight: '', dimensions: '', type: 'General' },
     orderId: '',
+    clientId: '',
+    client: '',
+    companyId: '',
+    customerId: '',
+    clientUserId: '',
     vehicle: '',
     vesselOrFlight: '',
     eta: new Date().toISOString().split('T')[0],
@@ -104,11 +151,15 @@ const Deliveries = () => {
     if (!st) return;
 
     if (st.orderId && !st.prefillOrderId) {
-      const { orderId, items, client, location, mode } = st;
+      const { orderId, items, client, location, mode, pickupLocation, dropLocation } = st;
       handleAction('add', {
         orderId,
         items,
-        pickupLocation: location || 'TBD - Warehouse',
+        client: client || '',
+        clientId: st.clientId || st.client_id || '',
+        customerId: st.customerId || st.customer_id || '',
+        pickupLocation: pickupLocation || 'TBD - Warehouse',
+        dropLocation: dropLocation || location || '',
         mode: mode || 'Road',
         passengerInfo: { name: client || '', count: 1, phone: '' }
       });
@@ -122,8 +173,11 @@ const Deliveries = () => {
       handleAction('add', {
         orderId: orderRef,
         items: Array.isArray(st.items) ? st.items : [],
-        pickupLocation: st.location || 'TBD - Warehouse',
-        dropLocation: st.location || '',
+        client: st.client || '',
+        clientId: st.clientId || st.client_id || '',
+        customerId: st.customerId || st.customer_id || '',
+        pickupLocation: st.pickupLocation || st.pickup_location || 'TBD - Warehouse',
+        dropLocation: st.dropLocation || st.drop_location || st.location || '',
         mode: st.mode || 'Road',
         missionType: 'Delivery',
         passengerInfo: { name: st.client || '', count: 1, phone: '' },
@@ -166,6 +220,11 @@ const Deliveries = () => {
       passengerInfo: { name: '', count: 1, phone: '' },
       packageDetails: { weight: '', dimensions: '', type: 'General' },
       orderId: '',
+      clientId: '',
+      client: '',
+      companyId: '',
+      customerId: '',
+      clientUserId: '',
       vehicle: '',
       vesselOrFlight: '',
       eta: new Date().toISOString().split('T')[0],
@@ -182,6 +241,10 @@ const Deliveries = () => {
       pod: { signature: null, image: null, actualTime: null },
       ...(del && !del.id ? {
         orderId: del.orderId || '',
+        clientId: del.clientId || del.client_id || del.customer_id || '',
+        client: del.client || del.clientName || '',
+        customerId: del.customerId || del.customer_id || del.client_id || '',
+        companyId: del.companyId || del.company_id || '',
         pickupLocation: del.pickupLocation || '',
         dropLocation: del.dropLocation || '',
         missionType: del.missionType || 'Delivery',
@@ -228,6 +291,7 @@ const Deliveries = () => {
   const columns = [
     { header: "Dispatch ID", accessor: "id" },
     { header: "Order Ref", accessor: "orderId" },
+    { header: "Client", accessor: "client", render: (item) => item.client || item.clientName || '—' },
     { header: "Personnel", accessor: "driver" },
     {
       header: "Manifest Summary",
@@ -689,6 +753,30 @@ const Deliveries = () => {
                     <input type="text" value={formData.orderId} onChange={(e) => setFormData({ ...formData, orderId: e.target.value })} className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:border-accent outline-none font-bold" disabled={modalType === 'view'} placeholder="ORD-XXXX" />
                   </div>
                   <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted uppercase">Linked Client</label>
+                    <select
+                      className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:border-accent outline-none font-bold appearance-none cursor-pointer"
+                      value={formData.clientId || ''}
+                      onChange={(e) => {
+                        const selected = clientOptions.find(c => c.value === e.target.value);
+                        setFormData({
+                          ...formData,
+                          clientId: e.target.value,
+                          client: selected?.label || '',
+                          companyId: selected?.companyId || '',
+                          customerId: selected?.customerId || '',
+                          clientUserId: selected?.clientUserId || ''
+                        });
+                      }}
+                      disabled={modalType === 'view'}
+                    >
+                      <option value="">Link Client...</option>
+                      {clientOptions.map(client => (
+                        <option key={client.value} value={client.value}>{client.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
                     <label className="text-[10px] font-bold text-muted uppercase">Request Date</label>
                     <input type="text" value={formData.requestDate} disabled className="w-full bg-background/50 border border-border rounded-xl px-4 py-3 text-xs text-muted" />
                   </div>
@@ -799,6 +887,11 @@ const Deliveries = () => {
                               disabled={modalType === 'view'}
                             >
                               <option value="">Select Warehouse / Hub...</option>
+                              {formData.pickupLocation &&
+                                !warehouses.some(wh => wh.name === formData.pickupLocation) &&
+                                !['Third Party Vendor', 'Client Site'].includes(formData.pickupLocation) && (
+                                  <option value={formData.pickupLocation}>{formData.pickupLocation}</option>
+                                )}
                               {warehouses.map(wh => (
                                 <option key={wh.id} value={wh.name}>{wh.name}</option>
                               ))}

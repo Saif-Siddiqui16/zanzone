@@ -852,7 +852,7 @@ const Clients = () => {
 
                                   {/* Dispatch Delivery Button */}
                                   <button
-                                    onClick={() => { setDeliveryForm({ driver_name: '', plate_number: '', pickup_location: '', drop_location: order.location || '', delivery_date: order.due_date ? order.due_date.split('T')[0] : '', status: 'pending' }); setDeliveryModal({ isOpen: true, order }); }}
+                                    onClick={() => { setDeliveryForm({ driver_name: '', plate_number: '', pickup_location: order.pickupLocation || order.pickup_location || '', drop_location: order.location || order.delivery_address || '', delivery_date: order.due_date ? order.due_date.split('T')[0] : '', status: 'pending' }); setDeliveryModal({ isOpen: true, order }); }}
                                     disabled={order.deliveryCreated}
                                     className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
                                       order.deliveryCreated

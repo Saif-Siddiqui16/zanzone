@@ -923,10 +923,19 @@ exports.convertToProject = async (req, res) => {
             dbStatus = 'on_hold';
         }
 
+        const [orderRows] = await db.query(
+            `SELECT o.customer_id, o.client_name, c.name AS customer_name
+             FROM orders o
+             LEFT JOIN customers c ON o.customer_id = c.id
+             WHERE o.id = ? LIMIT 1`,
+            [orderId]
+        );
+        const orderRow = orderRows[0] || {};
+
         const [result] = await db.query(
-            `INSERT INTO projects (company_id, order_id, name, description, manager_id, location, status, start_date)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [companyId, orderId, name, description || null, managerId, location || null, dbStatus, startDate]
+            `INSERT INTO projects (company_id, customer_id, client_name, order_id, name, description, manager_id, location, status, start_date)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [companyId, orderRow.customer_id || null, orderRow.customer_name || orderRow.client_name || null, orderId, name, description || null, managerId, location || null, dbStatus, startDate]
         );
 
         // Update order status
@@ -934,8 +943,9 @@ exports.convertToProject = async (req, res) => {
 
         // Get project with joins (Note: table is companies if exists, else it might have been clients)
         const [projects] = await db.query(
-            `SELECT p.*, COALESCE(c.name, cu.name) as client_name FROM projects p 
+            `SELECT p.*, COALESCE(p.client_name, pc.name, c.name, cu.name) as client_name FROM projects p 
              LEFT JOIN companies c ON p.company_id = c.id 
+             LEFT JOIN customers pc ON p.customer_id = pc.id
              LEFT JOIN customers cu ON p.company_id = cu.id
              WHERE p.id = ?`,
             [result.insertId]
@@ -955,10 +965,12 @@ exports.convertToProject = async (req, res) => {
 exports.getAllProjects = async (req, res) => {
     try {
         const roleNorm = String(req.user?.role || '').toLowerCase().replace(/\s+/g, '_');
+        const hqId = parseInt(process.env.DEFAULT_COMPANY_ID || 1, 10);
+        const isHQ = (req.user?.company_id == hqId || !req.user?.company_id || req.companyScope == hqId);
         const isHQManagement = (isHQ && ['admin', 'concierge', 'operations', 'super_admin', 'superadmin'].includes(roleNorm));
 
         let cf;
-        if (roleNorm === 'super_admin' || isHQManagement) {
+        if (roleNorm === 'super_admin' || roleNorm === 'superadmin' || isHQManagement) {
             cf = { clause: '', params: [] };
         } else {
             cf = companyFilter(req, 'p');
@@ -966,10 +978,11 @@ exports.getAllProjects = async (req, res) => {
 
         const [rows] = await db.query(
             `SELECT p.*, 
-                    COALESCE(c.name, cu.name) as client_name, 
+                    COALESCE(p.client_name, pc.name, c.name, cu.name) as client_name, 
                     u.name as manager_name
              FROM projects p
              LEFT JOIN companies c ON p.company_id = c.id
+             LEFT JOIN customers pc ON p.customer_id = pc.id
              LEFT JOIN customers cu ON p.company_id = cu.id
              LEFT JOIN users u ON p.manager_id = u.id
              WHERE 1=1 ${cf.clause} ORDER BY p.created_at DESC`,
@@ -984,7 +997,7 @@ exports.getAllProjects = async (req, res) => {
 // POST /api/orders/projects
 exports.createProject = async (req, res) => {
     try {
-        const { name, description, manager_id, startDate, location, status, company_id } = req.body;
+        const { name, description, manager_id, startDate, location, status, company_id, customer_id, client_name, client_user_id } = req.body;
         if (!name || !String(name).trim()) {
             return errorResponse(res, 'Project name is required.', 400);
         }
@@ -997,6 +1010,8 @@ exports.createProject = async (req, res) => {
         };
 
         const requestedCompanyId = normalizePositiveInt(company_id);
+        let customerId = normalizePositiveInt(customer_id);
+        const clientUserId = normalizePositiveInt(client_user_id);
         const scopedCompanyId = normalizePositiveInt(req.companyScope);
         const fallbackCompanyId = normalizePositiveInt(process.env.DEFAULT_COMPANY_ID || 1);
 
@@ -1006,6 +1021,47 @@ exports.createProject = async (req, res) => {
         }
 
         let [companyRows] = await db.query('SELECT id FROM companies WHERE id = ? LIMIT 1', [companyId]);
+
+        let resolvedClientName =
+            client_name != null && String(client_name).trim() !== ''
+                ? String(client_name).trim()
+                : null;
+
+        if (!customerId && clientUserId) {
+            const [userRows] = await db.query('SELECT id, company_id, name, email FROM users WHERE id = ? LIMIT 1', [clientUserId]);
+            const userRow = userRows[0];
+            if (userRow) {
+                resolvedClientName = resolvedClientName || userRow.name || userRow.email || null;
+                const [custRows] = await db.query(
+                    'SELECT id, company_id, name FROM customers WHERE created_by = ? OR LOWER(TRIM(email)) = ? ORDER BY created_at DESC LIMIT 1',
+                    [clientUserId, String(userRow.email || '').trim().toLowerCase()]
+                );
+                if (custRows.length) {
+                    customerId = custRows[0].id;
+                    resolvedClientName = resolvedClientName || custRows[0].name || null;
+                    if (!requestedCompanyId && normalizePositiveInt(custRows[0].company_id)) {
+                        companyId = normalizePositiveInt(custRows[0].company_id);
+                        [companyRows] = await db.query('SELECT id FROM companies WHERE id = ? LIMIT 1', [companyId]);
+                    }
+                } else if (!requestedCompanyId && normalizePositiveInt(userRow.company_id)) {
+                    companyId = normalizePositiveInt(userRow.company_id);
+                    [companyRows] = await db.query('SELECT id FROM companies WHERE id = ? LIMIT 1', [companyId]);
+                }
+            }
+        }
+
+        if (customerId) {
+            const [custRows] = await db.query('SELECT id, company_id, name FROM customers WHERE id = ? LIMIT 1', [customerId]);
+            if (custRows.length) {
+                resolvedClientName = resolvedClientName || custRows[0].name || null;
+                if (!requestedCompanyId && normalizePositiveInt(custRows[0].company_id)) {
+                    companyId = normalizePositiveInt(custRows[0].company_id);
+                    [companyRows] = await db.query('SELECT id FROM companies WHERE id = ? LIMIT 1', [companyId]);
+                }
+            } else {
+                customerId = null;
+            }
+        }
 
         if (!companyRows.length && requestedCompanyId) {
             // Frontend can sometimes send customer/user id in clientId field.
@@ -1072,11 +1128,11 @@ exports.createProject = async (req, res) => {
         const startDateVal = startDate ? String(startDate).split('T')[0] : null;
 
         const [result] = await db.query(
-            `INSERT INTO projects (company_id, name, description, manager_id, location, status, start_date) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [companyId, String(name).trim(), description || null, managerId || null, location || null, projectStatus, startDateVal || null]
+            `INSERT INTO projects (company_id, customer_id, client_name, name, description, manager_id, location, status, start_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [companyId, customerId || null, resolvedClientName, String(name).trim(), description || null, managerId || null, location || null, projectStatus, startDateVal || null]
         );
 
-        const [projects] = await db.query(`SELECT p.*, COALESCE(c.name, cu.name) as client_name FROM projects p LEFT JOIN companies c ON p.company_id = c.id LEFT JOIN customers cu ON p.company_id = cu.id WHERE p.id = ?`, [result.insertId]);
+        const [projects] = await db.query(`SELECT p.*, COALESCE(p.client_name, pc.name, c.name, cu.name) as client_name FROM projects p LEFT JOIN companies c ON p.company_id = c.id LEFT JOIN customers pc ON p.customer_id = pc.id LEFT JOIN customers cu ON p.company_id = cu.id WHERE p.id = ?`, [result.insertId]);
         return successResponse(res, projects[0] || { id: result.insertId }, 'Project created.', 201);
     } catch (err) {
         console.error('Create project error:', err);
@@ -1089,10 +1145,12 @@ exports.updateProject = async (req, res) => {
     try {
         const { name, description, status, location, start_date, manager_id } = req.body;
         const roleNorm = String(req.user?.role || '').toLowerCase().replace(/\s+/g, '_');
+        const hqId = parseInt(process.env.DEFAULT_COMPANY_ID || 1, 10);
+        const isHQ = (req.user?.company_id == hqId || !req.user?.company_id || req.companyScope == hqId);
         const isHQManagement = (isHQ && ['admin', 'concierge', 'operations', 'super_admin', 'superadmin'].includes(roleNorm));
 
         let cs;
-        if (roleNorm === 'super_admin' || isHQManagement) {
+        if (roleNorm === 'super_admin' || roleNorm === 'superadmin' || isHQManagement) {
             cs = { clause: '', params: [] };
         } else {
             cs = companyScope(req);
@@ -1112,10 +1170,12 @@ exports.updateProject = async (req, res) => {
 exports.deleteProject = async (req, res) => {
     try {
         const roleNorm = String(req.user?.role || '').toLowerCase().replace(/\s+/g, '_');
+        const hqId = parseInt(process.env.DEFAULT_COMPANY_ID || 1, 10);
+        const isHQ = (req.user?.company_id == hqId || !req.user?.company_id || req.companyScope == hqId);
         const isHQManagement = (isHQ && ['admin', 'concierge', 'operations', 'super_admin', 'superadmin'].includes(roleNorm));
 
         let cs;
-        if (roleNorm === 'super_admin' || isHQManagement) {
+        if (roleNorm === 'super_admin' || roleNorm === 'superadmin' || isHQManagement) {
             cs = { clause: '', params: [] };
         } else {
             cs = companyScope(req);

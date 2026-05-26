@@ -122,7 +122,18 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                 vendorId: initialData?.vendorId || '',
                 isPreferredVendor: false,
                 type: initialData?.type || 'Custom Order',
-                deliveryType: initialData?.mode || 'Road'
+                deliveryType: initialData?.deliveryType || initialData?.delivery_mode || initialData?.deliveryMode || initialData?.mode || 'Road',
+                pickupLocation: initialData?.pickupLocation || initialData?.pickup_location || '',
+                pickupTime: initialData?.pickupTime || initialData?.pickup_time || '',
+                totalDistance: initialData?.totalDistance || initialData?.total_distance || '',
+                serviceType: initialData?.serviceType || 'One Way',
+                returnDate: initialData?.returnDate || '',
+                returnTime: initialData?.returnTime || '',
+                returnLocation: initialData?.returnLocation || '',
+                dailyDays: initialData?.dailyDays || 1,
+                luggage: initialData?.luggage || '',
+                stops: initialData?.stops || '',
+                amenities: initialData?.amenities || ''
             });
         } else if (selectedOrder) {
             const parsedItems = typeof selectedOrder.items === 'string' ? JSON.parse(selectedOrder.items) : selectedOrder.items;
@@ -147,7 +158,7 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                 vendorId: selectedOrder.vendorId || selectedOrder.vendor_id || '',
                 isPreferredVendor: !!(selectedOrder.vendorId || selectedOrder.vendor_id),
                 type: selectedOrder.type || 'Custom Order',
-                deliveryType: selectedOrder.deliveryType || selectedOrder.mode || 'Road',
+                deliveryType: selectedOrder.deliveryType || selectedOrder.delivery_mode || selectedOrder.deliveryMode || selectedOrder.mode || 'Road',
                 pickupLocation: selectedOrder.pickupLocation || selectedOrder.pickup_location || '',
                 pickupTime: selectedOrder.pickupTime || '',
                 totalDistance: selectedOrder.totalDistance || selectedOrder.total_distance || '',

@@ -274,6 +274,19 @@ const migrations = [
                 console.log('  🕒 customers.name column modification skipped:', e.message);
             }
         }
+    },
+    {
+        name: '016_project_and_delivery_client_links',
+        up: async () => {
+            await addColumnIfMissing('projects', 'customer_id', 'INT NULL', 'company_id');
+            await addColumnIfMissing('projects', 'client_name', 'VARCHAR(255) NULL', 'customer_id');
+            await addColumnIfMissing('deliveries', 'client_id', 'INT NULL', 'order_id');
+            await addColumnIfMissing('deliveries', 'created_by', 'INT NULL', 'client_id');
+            await addColumnIfMissing('deliveries', 'assigned_driver', 'INT NULL', 'status');
+            await addColumnIfMissing('deliveries', 'payout_status', "VARCHAR(50) NULL", 'delivery_fee');
+            await addColumnIfMissing('deliveries', 'payout_ready_at', 'DATETIME NULL', 'payout_status');
+            console.log('  ✅ projects/deliveries client-link columns ensured');
+        }
     }
 ];
 

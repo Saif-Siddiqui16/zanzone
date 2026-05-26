@@ -167,6 +167,8 @@ CREATE TABLE IF NOT EXISTS order_flow_logs (
 CREATE TABLE IF NOT EXISTS projects (
     id INT AUTO_INCREMENT PRIMARY KEY,
     company_id INT,
+    customer_id INT,
+    client_name VARCHAR(255),
     order_id INT,
     name VARCHAR(255) NOT NULL,
     description TEXT,
@@ -178,6 +180,7 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
     FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL,
     FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE SET NULL
 );
@@ -189,6 +192,8 @@ CREATE TABLE IF NOT EXISTS missions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     company_id INT,
     order_id INT,
+    client_id INT,
+    created_by INT,
     mission_type ENUM('Delivery','Pickup','Transfer','Chauffeur','Custom') DEFAULT 'Delivery',
     destination_type VARCHAR(100),
     assigned_driver INT,
@@ -303,10 +308,16 @@ CREATE TABLE IF NOT EXISTS deliveries (
     pickup_time TIME,
     signature TEXT,
     status ENUM('pending','pending_review','assigned','en_route','delivered','completed','cancelled') DEFAULT 'pending',
+    assigned_driver INT,
+    payout_status VARCHAR(50),
+    payout_ready_at DATETIME,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL,
     FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL,
+    FOREIGN KEY (client_id) REFERENCES customers(id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (assigned_driver) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE SET NULL
 );
 
@@ -450,7 +461,7 @@ CREATE TABLE IF NOT EXISTS purchase_requests (
     estimated_cost DECIMAL(12,2),
     requester VARCHAR(255),
     requester_id INT,
-    status ENUM('Pending','Approved','Rejected','Received','Cancelled') DEFAULT 'Pending',
+    status ENUM('Pending','Approved','Rejected','Received','Cancelled','Ordered','Quotes Received','Partial Receipt','Completed') DEFAULT 'Pending',
     priority ENUM('Low','Normal','High','Critical') DEFAULT 'Normal',
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -487,6 +498,9 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     vendor_id INT NOT NULL,
     items JSON,
     total_amount DECIMAL(12,2),
+    payment_terms VARCHAR(100) DEFAULT 'Net 30',
+    packing_slip VARCHAR(500),
+    admin_approved BOOLEAN DEFAULT FALSE,
     notes TEXT,
     status ENUM('Pending','Partially Received','Received','Cancelled') DEFAULT 'Pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

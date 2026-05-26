@@ -5,12 +5,15 @@ import { useData } from '../context/GlobalDataContext';
 import CustomDatePicker from './CustomDatePicker';
 
 const ProjectModal = ({ isOpen, onClose, onSave }) => {
-  const { clients, fetchClients } = useData();
+  const { clients, fetchClients, customerUsers = [], fetchCustomerUsers, currentUser } = useData();
   const [formData, setFormData] = useState({
     projectId: 'PRJ-' + Math.floor(100 + Math.random() * 900),
     projectName: '',
     client: '',
     clientId: '',
+    companyId: '',
+    customerId: '',
+    clientUserId: '',
     startDate: new Date().toISOString().split('T')[0],
     location: '',
     status: 'Pending',
@@ -20,18 +23,65 @@ const ProjectModal = ({ isOpen, onClose, onSave }) => {
   useEffect(() => {
     if (isOpen) {
       fetchClients();
+      fetchCustomerUsers({ include_all: true, include_client_role: true });
       setFormData({
         projectId: 'PRJ-' + Math.floor(100 + Math.random() * 900),
         projectName: '',
         client: '',
         clientId: '',
+        companyId: '',
+        customerId: '',
+        clientUserId: '',
         startDate: new Date().toISOString().split('T')[0],
         location: '',
         status: 'Pending',
         deliveryType: 'Road'
       });
     }
-  }, [isOpen, fetchClients]);
+  }, [isOpen, fetchClients, fetchCustomerUsers]);
+
+  const clientOptions = React.useMemo(() => {
+    const out = [];
+    const seen = new Set();
+    const add = (entry) => {
+      const key = entry.email ? `email:${entry.email.toLowerCase()}` : `${entry.source}:${entry.id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(entry);
+    };
+
+    (clients || []).forEach((c) => {
+      const type = String(c.client_type || c.clientType || c.account_type || c.accountType || c.role || '').toLowerCase();
+      const isCustomer = ['personal', 'direct', 'individual', 'customer'].some((x) => type.includes(x));
+      add({
+        id: c.id,
+        value: `${isCustomer ? 'customer' : 'company'}_${c.id}`,
+        label: c.companyName || c.business_name || c.name || c.email || `Client ${c.id}`,
+        email: c.email || '',
+        source: isCustomer ? 'customer' : 'company',
+        companyId: c.company_id || c.companyId || (!isCustomer ? c.id : (currentUser?.company_id || currentUser?.companyId || '')),
+        customerId: isCustomer ? c.id : '',
+        clientUserId: c.signup_user_id || ''
+      });
+    });
+
+    (customerUsers || []).forEach((u) => {
+      const role = String(u.role || '').toLowerCase();
+      const isCustomer = role === 'customer';
+      add({
+        id: u.id,
+        value: `${isCustomer ? 'user' : 'company'}_${u.id}`,
+        label: u.name || u.business_name || u.company_name || u.email || `Client ${u.id}`,
+        email: u.email || '',
+        source: isCustomer ? 'user' : 'company',
+        companyId: u.company_id || u.companyId || (currentUser?.company_id || currentUser?.companyId || ''),
+        customerId: u.customer_id || u.client_id || '',
+        clientUserId: isCustomer ? u.id : ''
+      });
+    });
+
+    return out.sort((a, b) => a.label.localeCompare(b.label));
+  }, [clients, customerUsers, currentUser?.company_id, currentUser?.companyId]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -79,19 +129,22 @@ const ProjectModal = ({ isOpen, onClose, onSave }) => {
               <select
                 value={formData.clientId}
                 onChange={(e) => {
-                  const selectedClient = clients.find(c => String(c.id) === e.target.value);
+                  const selectedClient = clientOptions.find(c => c.value === e.target.value);
                   setFormData({ 
                     ...formData, 
                     clientId: e.target.value, 
-                    client: selectedClient ? selectedClient.companyName || selectedClient.name : '' 
+                    companyId: selectedClient?.companyId || '',
+                    customerId: selectedClient?.customerId || '',
+                    clientUserId: selectedClient?.clientUserId || '',
+                    client: selectedClient ? selectedClient.label : '' 
                   });
                 }}
                 className="w-full bg-background border border-border rounded-lg pl-10 pr-4 py-2 text-sm focus:border-accent outline-none"
                 required
               >
                 <option value="">Select Client</option>
-                {clients.map(client => (
-                  <option key={client.id} value={client.id}>{client.companyName || client.name}</option>
+                {clientOptions.map(client => (
+                  <option key={client.value} value={client.value}>{client.label}</option>
                 ))}
               </select>
             </div>

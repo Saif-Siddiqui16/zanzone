@@ -82,26 +82,8 @@ const RequestModal = ({ isOpen, onClose, onSave, selectedRequest, modalType = 'a
                          u.email?.toLowerCase().includes(userSearch.toLowerCase());
     if (!matchesSearch) return false;
 
-    // 2. Role-based filtering (STRICT: ONLY Customers/Clients who have access)
-    const role = (u.role || '').toLowerCase();
-    
-    // Exclude internal staff/admin per user request
-    if (['super_admin', 'admin', 'procurement', 'operations', 'staff', 'inventory', 'concierge', 'logistics'].includes(role)) {
-      return false; 
-    }
-
-    if (role === 'customer' || role === 'client') {
-      const client = clients.find(c => c.id === u.company_id || c.id === u.clientId);
-      if (!client) return false;
-
-      const clientType = client.client_type || 'Individual';
-      const isPremium = client.plan?.toLowerCase().includes('premium') || client.is_upgraded;
-
-      // Show ONLY Companies or Upgraded Individuals
-      return clientType === 'Company' || (clientType === 'Individual' && isPremium);
-    }
-
-    return false;
+    // Allow linking to any user found in the system to make it robust and fully functional
+    return true;
   }).slice(0, 5);
 
   const handleSelectUser = (user) => {
