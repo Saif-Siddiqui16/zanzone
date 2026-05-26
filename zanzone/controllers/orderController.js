@@ -612,7 +612,10 @@ exports.update = async (req, res) => {
             'company_id',
             'pickup_location',
             'pickupLocation',
-            'items'
+            'items',
+            'vendor_id',
+            'vendorId',
+            'type'
         ];
 
         // Translate deliveryType (frontend) into a meta block stored in the notes column.
@@ -624,7 +627,7 @@ exports.update = async (req, res) => {
             req.body.notes = req.body.notes ? `${req.body.notes}\n\n${block}` : block;
         }
 
-        const fkFields = ['customer_id', 'vendor_id', 'client_id', 'company_id'];
+        const fkFields = ['customer_id', 'vendor_id', 'vendorId', 'client_id', 'company_id'];
         const sets = [];
         const values = [];
 
@@ -632,7 +635,7 @@ exports.update = async (req, res) => {
             if (!allowedFields.includes(key)) continue;
             // Convert empty strings to null for foreign key fields
             const cleanVal = (fkFields.includes(key) && (val === '' || val === undefined)) ? null : val;
-            const dbKey = key === 'client_id' ? 'customer_id' : (key === 'pickupLocation' ? 'pickup_location' : key);
+            const dbKey = key === 'client_id' ? 'customer_id' : (key === 'pickupLocation' ? 'pickup_location' : (key === 'vendorId' ? 'vendor_id' : key));
             if (dbKey === 'company_id' && cleanVal != null) {
                 const resolvedCompanyId = await resolveValidCompanyId({
                     requestedCompanyId: normalizePositiveInt(cleanVal),
