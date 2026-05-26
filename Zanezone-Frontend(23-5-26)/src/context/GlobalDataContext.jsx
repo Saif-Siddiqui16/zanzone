@@ -4784,6 +4784,8 @@ export const GlobalDataProvider = ({ children }) => {
       const res = await api.post("/procurement/po", reqData);
       if (res.data?.success) {
         await fetchPurchaseOrders();
+        // Refresh purchase requests to reflect status/total changes automatically
+        await fetchPurchaseRequests();
         addLog({
           action: "PO Issued",
           detail: `Purchase Order ${res.data.data.id} sent to ${po.vendorName}.`,
@@ -4818,6 +4820,8 @@ export const GlobalDataProvider = ({ children }) => {
         payment_terms: payload.payment_terms,
         paymentTerms: payload.payment_terms,
       };
+      // After updating PO, refresh purchase requests to keep totals/status in sync
+      await fetchPurchaseRequests();
       setPurchaseOrders((prev) =>
         prev.map((po) => (po.id === updated.id ? merged : po)),
       );
