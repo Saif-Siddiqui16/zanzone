@@ -93,7 +93,7 @@ const Orders = () => {
   const handleSave = (formData) => {
     if (modalType === 'add') {
       addOrder(formData);
-    } else if (modalType === 'edit') {
+    } else {
       updateOrder(selectedOrder.id, formData);
     }
     setIsModalOpen(false);

@@ -2959,7 +2959,7 @@ export const GlobalDataProvider = ({ children }) => {
         notes: rest.notes,
         location: rest.location,
         pickup_location: rest.pickupLocation ?? rest.pickup_location,
-        total_amount: rest.total,
+        total_amount: rest.total ?? rest.total_amount ?? rest.totalAmount,
         due_date: isoDateSlice(rest.dueDate || rest.due_date) || null,
         order_date:
           isoDateSlice(rest.date || rest.requestDate || rest.order_date) ||

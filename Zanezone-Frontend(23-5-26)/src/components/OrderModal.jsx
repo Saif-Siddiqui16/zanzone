@@ -21,6 +21,20 @@ const clampDueDateToRequest = (requestDate, dueDate) => {
 
 const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelete, initialData, role }) => {
     const { currentUser, marketplaceVendors = [], clients, fetchVendors, fetchClients, customerUsers, fetchCustomerUsers } = useData();
+    const [currentModalType, setCurrentModalType] = useState(modalType);
+
+    useEffect(() => {
+        setCurrentModalType(modalType);
+    }, [modalType, isOpen]);
+
+    const handleCancel = () => {
+        if (modalType === 'view' && currentModalType === 'edit') {
+            setCurrentModalType('view');
+        } else {
+            onClose();
+        }
+    };
+
     /** Logged-in user role drives permissions (parent `role` prop is often a portal default, e.g. ClientDashboard). */
     const portalRole = normalizeRole(currentUser?.role || role || '');
     const isPersonalCustomer = portalRole === 'customer';
@@ -172,7 +186,7 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                 amenities: selectedOrder.amenities || ''
             });
         }
-    }, [modalType, selectedOrder, isOpen, initialData, portalRole, currentUser?.name, currentUser?.role, currentUser?.email, clients, customerOnlyForDropdown]);
+    }, [isOpen, selectedOrder, modalType]);
 
     useEffect(() => {
         const calculateDistance = async () => {
@@ -235,9 +249,9 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
             isOpen={isOpen}
             onClose={onClose}
             title={
-                modalType === 'view' ? 'Order Details' :
-                    modalType === 'edit' ? 'Edit Order' :
-                        modalType === 'delete' ? 'Cancel Order' : 'Create New Order'
+                currentModalType === 'view' ? 'Order Details' :
+                    currentModalType === 'edit' ? 'Edit Order' :
+                        currentModalType === 'delete' ? 'Cancel Order' : 'Create New Order'
             }
         >
             <form className="space-y-6" onSubmit={handleSubmit}>
@@ -252,20 +266,20 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                 ) : (
                     <div className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {(modalType === 'view' || modalType === 'edit') && (
+                            {(currentModalType === 'view' || currentModalType === 'edit') && (
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-muted uppercase">Order ID</label>
                                     <input type="text" value={selectedOrder?.id || ''} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled />
                                 </div>
                             )}
-                            {(modalType === 'view' || modalType === 'edit') && (
+                            {(currentModalType === 'view' || currentModalType === 'edit') && (
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-muted uppercase">Status</label>
                                     <select
                                         value={formData.status}
                                         onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                                         className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none font-bold"
-                                        disabled={modalType === 'view' || !canEditOrderStatus}
+                                        disabled={currentModalType === 'view' || !canEditOrderStatus}
                                     >
                                         {ORDER_STATUS_OPTIONS.map(({ value, label }) => (
                                             <option key={value} value={value}>{label}</option>
@@ -296,7 +310,7 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                                             });
                                         }}
                                         className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none font-bold"
-                                        disabled={modalType === 'view'}
+                                        disabled={currentModalType === 'view'}
                                     >
                                         <option value="">
                                             {formData.client
@@ -318,7 +332,7 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                                         <label className="text-[10px] font-black text-muted uppercase tracking-[0.2em]">Institutional Requisition Items</label>
                                         <p className="text-[9px] text-secondary italic uppercase tracking-tighter mt-0.5">Define multi-line asset specifications below</p>
                                     </div>
-                                    {modalType !== 'view' && (
+                                    {currentModalType !== 'view' && (
                                         <button
                                             type="button"
                                             onClick={handleAddItem}
@@ -343,7 +357,7 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                                                             onChange={(e) => handleItemChange(index, 'name', e.target.value)}
                                                             placeholder="e.g. Vintage Champagne"
                                                             className="w-full bg-background border border-border rounded-lg pl-9 pr-3 py-2 text-xs focus:border-accent outline-none font-bold"
-                                                            disabled={modalType === 'view'}
+                                                            disabled={currentModalType === 'view'}
                                                             required
                                                         />
                                                     </div>
@@ -355,7 +369,7 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                                                         value={item.qty}
                                                         onChange={(e) => handleItemChange(index, 'qty', e.target.value)}
                                                         className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs focus:border-accent outline-none text-center font-bold"
-                                                        disabled={modalType === 'view'}
+                                                        disabled={currentModalType === 'view'}
                                                         min="1"
                                                         required
                                                     />
@@ -370,7 +384,7 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                                                             onChange={(e) => handleItemChange(index, 'price', e.target.value)}
                                                             placeholder="0.00"
                                                             className="w-full bg-background border border-border rounded-lg pl-6 pr-3 py-2 text-xs focus:border-accent outline-none font-bold"
-                                                            disabled={modalType === 'view'}
+                                                            disabled={currentModalType === 'view'}
                                                             step="0.01"
                                                         />
                                                     </div>
@@ -382,7 +396,7 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                                                             ${(parseFloat(item.price || 0) * (parseInt(item.qty) || 0)).toFixed(2)}
                                                         </div>
                                                     </div>
-                                                    {modalType !== 'view' && formData.items.length > 1 && (
+                                                    {currentModalType !== 'view' && formData.items.length > 1 && (
                                                         <button type="button" onClick={() => handleRemoveItem(index)} className="p-2 mb-0.5 text-danger hover:bg-danger/10 rounded-lg transition-colors shrink-0">
                                                             <Trash2 size={16} />
                                                         </button>
@@ -392,7 +406,7 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                                         </div>
                                     ))}
                                 </div>
-                                {modalType !== 'view' && (
+                                {currentModalType !== 'view' && (
                                     <p className="text-[9px] text-muted italic">* Prices can be left empty if currently unknown (e.g. pending store visit).</p>
                                 )}
 
@@ -411,10 +425,10 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                                     <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={14} />
                                     <input
                                         type="text"
-                                        value={modalType === 'view' ? (selectedOrder?.pickupLocation || selectedOrder?.pickup_location || '') : formData.pickupLocation}
+                                        value={formData.pickupLocation}
                                         onChange={(e) => setFormData({ ...formData, pickupLocation: e.target.value })}
                                         className="w-full bg-background border border-border rounded-lg pl-10 pr-4 py-2 text-sm focus:border-accent outline-none font-bold"
-                                        disabled={modalType === 'view'}
+                                        disabled={currentModalType === 'view'}
                                         placeholder="Enter pickup location"
                                     />
                                 </div>
@@ -427,10 +441,10 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                                     <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={14} />
                                     <input
                                         type="text"
-                                        value={modalType === 'view' ? (selectedOrder?.location || '') : formData.location}
+                                        value={formData.location}
                                         onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                                         className="w-full bg-background border border-border rounded-lg pl-10 pr-4 py-2 text-sm focus:border-accent outline-none font-bold"
-                                        disabled={modalType === 'view'}
+                                        disabled={currentModalType === 'view'}
                                         placeholder="Enter destination"
                                     />
                                 </div>
@@ -441,14 +455,14 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                                 <label className="text-[10px] font-bold text-accent uppercase tracking-widest pl-1">Total Distance (km)</label>
                                 <input
                                     type="text"
-                                    value={modalType === 'view' ? (selectedOrder?.totalDistance || selectedOrder?.total_distance || '') : formData.totalDistance}
+                                    value={formData.totalDistance}
                                     onChange={(e) => setFormData({ ...formData, totalDistance: e.target.value })}
                                     className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm text-accent font-black focus:border-accent outline-none"
-                                    disabled={modalType === 'view'}
+                                    disabled={currentModalType === 'view'}
                                     placeholder="Distance auto-calculated..."
                                 />
                             </div>
-                            {modalType === 'view' && String(selectedOrder?.delivery_instructions || '').trim() && (
+                            {currentModalType === 'view' && String(selectedOrder?.delivery_instructions || '').trim() && (
                                 <div className="space-y-1 p-4 rounded-xl border border-warning/25 bg-warning/5">
                                     <label className="text-[10px] font-bold text-warning uppercase tracking-widest">Customer delivery instructions</label>
                                     <p className="text-sm text-secondary font-medium whitespace-pre-wrap leading-relaxed">
@@ -472,7 +486,7 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                                         });
                                     }}
                                     className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none font-bold"
-                                    disabled={modalType === 'view'}
+                                    disabled={currentModalType === 'view'}
                                 >
                                     <option value="">Select Vendor...</option>
                                     {marketplaceVendors.map(v => (
@@ -487,13 +501,11 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                             <div className="space-y-1">
                                 <CustomDatePicker
                                     label="Due Date"
-                                    disabled={modalType === 'view'}
-                                    selectedDate={modalType === 'view'
-                                        ? (isoDateSlice(selectedOrder?.due_date || selectedOrder?.dueDate) || isoDateSlice(formData.dueDate))
-                                        : formData.dueDate}
+                                    disabled={currentModalType === 'view'}
+                                    selectedDate={formData.dueDate}
                                     onChange={(date) => setFormData({ ...formData, dueDate: clampDueDateToRequest(formData.requestDate, date) })}
                                 />
-                                {modalType === 'view' && selectedOrder?.createdAt && (
+                                {currentModalType === 'view' && selectedOrder?.createdAt && (
                                     <p className="text-[9px] text-muted italic mt-1">Requested On: {new Date(selectedOrder.createdAt).toLocaleDateString()}</p>
                                 )}
                             </div>
@@ -509,7 +521,7 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                                                 ? 'bg-accent/20 border-accent text-accent shadow-lg shadow-accent/5'
                                                 : 'bg-white/5 border-white/10 text-muted hover:border-white/30'
                                                 }`}
-                                            disabled={modalType === 'view'}
+                                            disabled={currentModalType === 'view'}
                                         >
                                             {mode}
                                         </button>
@@ -519,10 +531,10 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                             <div className="space-y-1">
                                 <label className="text-[10px] font-bold text-muted uppercase">Order Type</label>
                                 <select
-                                    value={modalType === 'view' ? (selectedOrder?.type || 'Custom Order') : formData.type}
+                                    value={formData.type}
                                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                                     className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none font-bold"
-                                    disabled={modalType === 'view'}
+                                    disabled={currentModalType === 'view'}
                                 >
                                     <option>Procurement</option>
                                     <option>Provisioning</option>
@@ -543,7 +555,7 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                                             value={formData.serviceType}
                                             onChange={(e) => setFormData({ ...formData, serviceType: e.target.value })}
                                             className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none"
-                                            disabled={modalType === 'view'}
+                                            disabled={currentModalType === 'view'}
                                         >
                                             <option>One Way</option>
                                             <option>Return</option>
@@ -554,52 +566,52 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                                     {formData.serviceType === 'Daily' && (
                                         <div className="space-y-1">
                                             <label className="text-[10px] font-bold text-muted uppercase">Number of Days</label>
-                                            <input type="number" min="1" value={formData.dailyDays} onChange={e => setFormData({ ...formData, dailyDays: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={modalType === 'view'} />
+                                            <input type="number" min="1" value={formData.dailyDays} onChange={e => setFormData({ ...formData, dailyDays: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={currentModalType === 'view'} />
                                         </div>
                                     )}
 
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-bold text-muted uppercase">Pick-up Location</label>
-                                        <input type="text" value={formData.pickupLocation} onChange={e => setFormData({ ...formData, pickupLocation: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={modalType === 'view'} placeholder="e.g. LPIA Airport" />
+                                        <input type="text" value={formData.pickupLocation} onChange={e => setFormData({ ...formData, pickupLocation: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={currentModalType === 'view'} placeholder="e.g. LPIA Airport" />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-bold text-muted uppercase">Pick-up Time</label>
-                                        <input type="time" value={formData.pickupTime} onChange={e => setFormData({ ...formData, pickupTime: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={modalType === 'view'} />
+                                        <input type="time" value={formData.pickupTime} onChange={e => setFormData({ ...formData, pickupTime: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={currentModalType === 'view'} />
                                     </div>
 
                                     {formData.serviceType === 'Return' && (
                                         <>
                                             <div className="space-y-1">
-                                                <CustomDatePicker label="Return Date" selectedDate={formData.returnDate} onChange={date => setFormData({ ...formData, returnDate: date })} disabled={modalType === 'view'} />
+                                                <CustomDatePicker label="Return Date" selectedDate={formData.returnDate} onChange={date => setFormData({ ...formData, returnDate: date })} disabled={currentModalType === 'view'} />
                                             </div>
                                             <div className="space-y-1">
                                                 <label className="text-[10px] font-bold text-muted uppercase">Return Time</label>
-                                                <input type="time" value={formData.returnTime} onChange={e => setFormData({ ...formData, returnTime: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={modalType === 'view'} />
+                                                <input type="time" value={formData.returnTime} onChange={e => setFormData({ ...formData, returnTime: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={currentModalType === 'view'} />
                                             </div>
                                             <div className="col-span-1 md:col-span-2 space-y-1">
                                                 <label className="text-[10px] font-bold text-muted uppercase">Return Location</label>
-                                                <input type="text" value={formData.returnLocation} onChange={e => setFormData({ ...formData, returnLocation: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={modalType === 'view'} />
+                                                <input type="text" value={formData.returnLocation} onChange={e => setFormData({ ...formData, returnLocation: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={currentModalType === 'view'} />
                                             </div>
                                         </>
                                     )}
 
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-bold text-muted uppercase">Luggage Specification</label>
-                                        <input type="text" value={formData.luggage} onChange={e => setFormData({ ...formData, luggage: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={modalType === 'view'} placeholder="e.g. 2 large suitcases, 1 carry-on" />
+                                        <input type="text" value={formData.luggage} onChange={e => setFormData({ ...formData, luggage: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={currentModalType === 'view'} placeholder="e.g. 2 large suitcases, 1 carry-on" />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-bold text-muted uppercase">Required Stops</label>
-                                        <input type="text" value={formData.stops} onChange={e => setFormData({ ...formData, stops: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={modalType === 'view'} placeholder="e.g. Stop at pharmacy" />
+                                        <input type="text" value={formData.stops} onChange={e => setFormData({ ...formData, stops: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={currentModalType === 'view'} placeholder="e.g. Stop at pharmacy" />
                                     </div>
                                     <div className="col-span-1 md:col-span-2 space-y-1">
                                         <label className="text-[10px] font-bold text-muted uppercase">Special Amenities</label>
-                                        <input type="text" value={formData.amenities} onChange={e => setFormData({ ...formData, amenities: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={modalType === 'view'} placeholder="e.g. Baby Car Seat, Wheelchair, Stroller, Champagne" />
+                                        <input type="text" value={formData.amenities} onChange={e => setFormData({ ...formData, amenities: e.target.value })} className="w-full bg-background border border-border rounded-lg px-4 py-2 text-sm focus:border-accent outline-none" disabled={currentModalType === 'view'} placeholder="e.g. Baby Car Seat, Wheelchair, Stroller, Champagne" />
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        {modalType === 'view' && selectedOrder?.createdAt && (
+                        {currentModalType === 'view' && selectedOrder?.createdAt && (
                             <div className="mt-6 p-4 bg-white/5 rounded-xl border border-border space-y-4">
                                 <div className="flex items-center gap-3 text-sm">
                                     <Clock size={16} className="text-accent" />
@@ -610,13 +622,18 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                         )}
 
                         <div className="flex gap-3 justify-end pt-6">
-                            <button type="button" onClick={onClose} className="btn-secondary">{modalType === 'view' ? 'Close' : 'Cancel'}</button>
-                            {modalType === 'view' && (
+                            <button type="button" onClick={handleCancel} className="btn-secondary">{currentModalType === 'view' ? 'Close' : 'Cancel'}</button>
+                            {currentModalType === 'view' && (
                                 <button type="button" onClick={() => window.print()} className="btn-primary flex items-center gap-2">
                                     <Printer size={16} /> Print Acknowledgement
                                 </button>
                             )}
-                            {modalType !== 'view' && canCreateManualOrder && (
+                            {currentModalType === 'view' && canCreateManualOrder && (
+                                <button type="button" onClick={() => setCurrentModalType('edit')} className="px-6 py-2.5 bg-accent border border-accent/50 text-black rounded-xl text-xs font-black uppercase tracking-widest hover:bg-accent/80 shadow-lg shadow-accent/20">
+                                    Edit Details
+                                </button>
+                            )}
+                            {currentModalType !== 'view' && canCreateManualOrder && (
                                 <button type="submit" className="btn-primary">Save Order</button>
                             )}
                         </div>
@@ -624,7 +641,7 @@ const OrderModal = ({ isOpen, onClose, modalType, selectedOrder, onSave, onDelet
                 )}
             </form>
         </Modal>
-        {isOpen && modalType === 'view' && selectedOrder && (
+        {isOpen && currentModalType === 'view' && selectedOrder && (
             <div className="hidden invoice-print-container bg-white text-black font-sans">
                 <div className="w-full flex-1 flex flex-col">
                     {/* Sovereign Header */}
