@@ -9,12 +9,24 @@ import { normalizeRole } from '../../utils/authUtils';
 import { formatDateTimeEst } from '../../utils/dateEst';
 
 const PurchaseRequests = () => {
-  const { 
-    purchaseRequests, addPurchaseRequest, updatePurchaseRequest, deletePurchaseRequest, 
-    fetchProcurement, hasMenuPermission, currentUser, fetchCustomerUsers, fetchStaff, fetchClients 
+  const {
+    purchaseRequests,
+    addPurchaseRequest,
+    updatePurchaseRequest,
+    deletePurchaseRequest,
+    fetchProcurement,
+    hasMenuPermission,
+    currentUser,
+    fetchCustomerUsers,
+    fetchStaff,
+    fetchClients,
   } = useData();
+
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalType, setModalType] = useState('view');
+  const [selectedRequest, setSelectedRequest] = useState(null);
 
   const userRole = (currentUser?.role || '').toLowerCase().replace(/\s+/g, '_');
   const isCustomer = ['customer', 'saas_client', 'client'].includes(userRole);
@@ -25,18 +37,18 @@ const PurchaseRequests = () => {
     fetchStaff();
     fetchClients();
   }, [fetchProcurement, fetchCustomerUsers, fetchStaff, fetchClients]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalType, setModalType] = useState('view');
-  const [selectedRequest, setSelectedRequest] = useState(null);
 
   const filteredRequests = purchaseRequests.filter(r => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
-    return String(r.id).toLowerCase().includes(term) ||
+    return (
+      String(r.id).toLowerCase().includes(term) ||
       r.requester?.toLowerCase().includes(term) ||
       r.item_name?.toLowerCase().includes(term) ||
-      (r.items && JSON.stringify(r.items).toLowerCase().includes(term));
+      (r.items && JSON.stringify(r.items).toLowerCase().includes(term))
+    );
   });
+
   const itemsPerPage = 10;
   const currentRequests = filteredRequests.slice((page - 1) * itemsPerPage, page * itemsPerPage);
   const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
@@ -50,7 +62,7 @@ const PurchaseRequests = () => {
   const handleSave = (formData) => {
     if (modalType === 'add') {
       addPurchaseRequest(formData);
-    } else {
+    } else if (modalType === 'edit') {
       updatePurchaseRequest({ ...selectedRequest, ...formData });
     }
     setIsModalOpen(false);
@@ -62,7 +74,7 @@ const PurchaseRequests = () => {
   };
 
   const columns = [
-    { header: "Request ID", accessor: "id" },
+    { header: "Request ID", accessor: "requestId" },
     {
       header: "Items",
       accessor: "items",
@@ -71,7 +83,7 @@ const PurchaseRequests = () => {
         if (items.length === 0) return item.item || "No Items";
         if (items.length === 1) return items[0].name;
         return `${items[0].name} (+${items.length - 1} more)`;
-      }
+      },
     },
     { header: "Requester", accessor: "requester" },
     {
@@ -81,7 +93,7 @@ const PurchaseRequests = () => {
         const items = Array.isArray(item.items) ? item.items : [];
         const total = item.total || items.reduce((acc, i) => acc + ((parseFloat(i.price) || 0) * (parseFloat(i.qty) || 0)), 0);
         return `$${parseFloat(total || 0).toLocaleString()}`;
-      }
+      },
     },
     { header: "Department", accessor: "department" },
     { header: "Status", accessor: "status" },
@@ -148,12 +160,7 @@ const PurchaseRequests = () => {
         />
         {filteredRequests.length > itemsPerPage && (
           <div className="mt-6 border-t border-white/5 pt-6">
-            <Pagination
-              currentPage={page}
-              totalPages={totalPages}
-              onPageChange={setPage}
-              totalItems={filteredRequests.length}
-            />
+            <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} totalItems={filteredRequests.length} />
           </div>
         )}
       </div>
@@ -162,7 +169,7 @@ const PurchaseRequests = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSave}
-        selectedRequest={selectedRequest}
+        selectedRequest={selectedRequest ? JSON.parse(JSON.stringify(selectedRequest)) : null}
         modalType={modalType}
       />
     </div>

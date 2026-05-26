@@ -61,7 +61,7 @@ const Table = ({ columns, data, actions, onView, onEdit, onDelete, canEdit = tru
           <tbody className="divide-y divide-border/40">
             {displayData.map((row, rowIdx) => (
               <tr
-                key={rowIdx}
+                key={row.id || row.requestId || rowIdx}
                 className="transition-all duration-150 group hover:bg-white/[0.025]"
               >
                 {/* Row number */}
@@ -143,7 +143,7 @@ const Table = ({ columns, data, actions, onView, onEdit, onDelete, canEdit = tru
       <div className="md:hidden space-y-4">
         {displayData.map((row, rowIdx) => (
           <div
-            key={rowIdx}
+            key={row.id || row.requestId || rowIdx}
             className="bg-white/[0.03] border border-white/10 rounded-[2rem] p-5 sm:p-6 space-y-5 hover:border-accent/40 transition-all duration-300 shadow-xl relative overflow-hidden group"
           >
             {/* Subtle Gradient Background on Hover */}

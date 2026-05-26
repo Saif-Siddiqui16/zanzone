@@ -1602,6 +1602,51 @@ export const GlobalDataProvider = ({ children }) => {
     });
   };
 
+  const mapPurchaseRequest = React.useCallback((r) => {
+    let parsedItems = r.items;
+    if (typeof parsedItems === "string") {
+      try {
+        parsedItems = JSON.parse(parsedItems);
+      } catch {
+        parsedItems = [];
+      }
+    }
+    const itemsArray = (() => {
+      if (Array.isArray(parsedItems) && parsedItems.length) return parsedItems;
+      if (r.item_name) {
+        return [
+          {
+            name: r.item_name,
+            category: r.category || "",
+            qty: r.quantity ?? 0,
+            price: parseFloat(r.estimated_cost) || 0,
+          },
+        ];
+      }
+      return [];
+    })();
+
+    const mappedItems = itemsArray.map((item, idx) => ({
+      ...item,
+      name: item.name || r.item_name || "",
+      qty: item.qty ?? item.quantity ?? r.quantity ?? 1,
+      price: parseFloat(item.price ?? item.estimated_cost ?? r.estimated_cost ?? 0),
+    }));
+
+    const computedTotal = mappedItems.reduce((acc, item) => acc + (item.price * item.qty), 0);
+    const finalTotal = parseFloat(r.estimated_cost || r.total || computedTotal || 0);
+
+    return {
+      ...r,
+      requestId: r.request_id ?? r.requestId ?? (r.id ? `REQ-${r.id}` : `REQ-${Date.now()}`),
+      id: r.id ?? r.request_id ?? r.requestId,
+      items: mappedItems,
+      item: r.item_name || (mappedItems[0]?.name || ""),
+      total: finalTotal,
+      date: r.created_at || r.date,
+    };
+  }, []);
+
   const fetchProcurement = React.useCallback(async () => {
     try {
       const [reqs, quotes, pos] = await Promise.all([
@@ -1609,7 +1654,9 @@ export const GlobalDataProvider = ({ children }) => {
         api.get("/procurement/quotes").catch((e) => ({ data: [] })),
         api.get("/procurement/po").catch((e) => ({ data: [] })),
       ]);
-      if (reqs.data?.success) setPurchaseRequests(reqs.data.data);
+      if (reqs.data?.success) {
+        setPurchaseRequests(reqs.data.data.map(mapPurchaseRequest));
+      }
       if (quotes.data?.success) setQuotes(quotes.data.data);
       if (pos.data?.success)
         setPurchaseOrders(
@@ -1618,7 +1665,7 @@ export const GlobalDataProvider = ({ children }) => {
     } catch (e) {
       console.error("Fetch procurement failed", e);
     }
-  }, []);
+  }, [mapPurchaseRequest]);
 
   const fetchQuotes = React.useCallback(async (params = {}) => {
     try {
@@ -1645,29 +1692,12 @@ export const GlobalDataProvider = ({ children }) => {
     try {
       const res = await api.get("/procurement/requests", { params });
       if (res.data?.success) {
-        setPurchaseRequests(
-          res.data.data.map((r) => {
-            let parsedItems = r.items;
-            if (typeof parsedItems === "string") {
-              try {
-                parsedItems = JSON.parse(parsedItems);
-              } catch {
-                parsedItems = [];
-              }
-            }
-            return {
-              ...r,
-              items: Array.isArray(parsedItems) ? parsedItems : [],
-              total: r.estimated_cost || r.total,
-              date: r.created_at || r.date,
-            };
-          }),
-        );
+        setPurchaseRequests(res.data.data.map(mapPurchaseRequest));
       }
     } catch (e) {
       console.error("Fetch purchase requests failed", e);
     }
-  }, []);
+  }, [mapPurchaseRequest]);
 
   const fetchPurchaseOrders = React.useCallback(async (params = {}) => {
     try {
@@ -4712,15 +4742,23 @@ export const GlobalDataProvider = ({ children }) => {
 
   const addPurchaseRequest = async (req) => {
     try {
+      const uniqueId = Date.now();
       const body = {
         ...req,
+        items: Array.isArray(req.items) ? req.items : [],
+        id: req.id ?? uniqueId,
+        requestId: req.requestId ?? `REQ-${Math.floor(100 + Math.random() * 900)}`,
         status:
           req.status && String(req.status).trim() !== ""
             ? req.status
             : "Pending",
       };
+      // Send estimated_cost to backend since backend reads estimated_cost on creation
+      body.estimated_cost = req.total ?? req.estimated_cost ?? 0;
+
       const res = await api.post("/procurement/requests", body);
       if (res.data?.success) {
+        // Fetch the fresh requests from the backend to get the actual auto-incremented ID and keep state correct!
         await fetchPurchaseRequests();
         addLog({
           action: "Request Initialized",
@@ -4735,7 +4773,8 @@ export const GlobalDataProvider = ({ children }) => {
 
   const updatePurchaseRequest = async (updated) => {
     try {
-      await api.put(`/procurement/requests/${updated.id}`, updated);
+      const identifier = updated.id ?? updated.requestId;
+      await api.put(`/procurement/requests/${identifier}`, updated);
       await fetchPurchaseRequests();
       addLog({
         action: "Request Updated",
@@ -4750,7 +4789,7 @@ export const GlobalDataProvider = ({ children }) => {
   const deletePurchaseRequest = async (id) => {
     try {
       await api.delete(`/procurement/requests/${id}`);
-      setPurchaseRequests((prev) => prev.filter((r) => r.id !== id));
+      setPurchaseRequests((prev) => prev.filter((r) => r.id !== id && r.requestId !== id));
       addLog({
         action: "Request Purged",
         detail: `Removed request ID ${id} from queue.`,

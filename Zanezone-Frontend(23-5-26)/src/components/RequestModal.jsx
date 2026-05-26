@@ -32,7 +32,8 @@ const RequestModal = ({ isOpen, onClose, onSave, selectedRequest, modalType = 'a
       if (selectedRequest && (modalType === 'edit' || modalType === 'view')) {
         let normalizedItems = [];
         if (selectedRequest.items && Array.isArray(selectedRequest.items)) {
-          normalizedItems = [...selectedRequest.items];
+          // Deep clone each item to avoid mutating the original request object
+          normalizedItems = selectedRequest.items.map(item => ({ ...item }));
         } else if (selectedRequest.item) {
           normalizedItems = [{ name: selectedRequest.item, qty: selectedRequest.qty || 1, price: selectedRequest.price || 0 }];
         } else {
@@ -102,9 +103,16 @@ const RequestModal = ({ isOpen, onClose, onSave, selectedRequest, modalType = 'a
   };
 
   const handleItemChange = (index, field, value) => {
-    const newItems = [...formData.items];
-    newItems[index][field] = field === 'name' ? value : parseFloat(value) || 0;
-    setFormData({ ...formData, items: newItems });
+    const newItems = formData.items.map((itm, i) => {
+        if (i === index) {
+          return {
+            ...itm,
+            [field]: field === 'name' ? value : parseFloat(value) || 0
+          };
+        }
+        return itm;
+      });
+      setFormData({ ...formData, items: newItems });
   };
 
   const calculateTotal = () => {
