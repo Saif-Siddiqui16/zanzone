@@ -263,15 +263,15 @@ function clientMatchesTypeFilter(client, requestedType) {
   const desired = normalizeClientTypeValue(requestedType);
   const actual = normalizeClientTypeValue(
     client?.client_type ??
-      client?.clientType ??
-      client?.account_type ??
-      client?.accountType ??
-      client?.role ??
-      client?.user_role ??
-      (String(client?.plan || "").toLowerCase() !== "free" &&
+    client?.clientType ??
+    client?.account_type ??
+    client?.accountType ??
+    client?.role ??
+    client?.user_role ??
+    (String(client?.plan || "").toLowerCase() !== "free" &&
       String(client?.plan || "").trim()
-        ? "saas"
-        : ""),
+      ? "saas"
+      : ""),
   );
   if (!desired) return true;
   return desired.toLowerCase() === actual.toLowerCase();
@@ -290,10 +290,10 @@ function vendorPathId(id) {
 function buildVendorApiBody(vendor, companyId) {
   const name = String(
     vendor.name ||
-      vendor.vendor_name ||
-      vendor.business_name ||
-      vendor.company_name ||
-      "",
+    vendor.vendor_name ||
+    vendor.business_name ||
+    vendor.company_name ||
+    "",
   ).trim();
   if (!name) {
     const err = new Error("Vendor name is required.");
@@ -1077,10 +1077,10 @@ export const GlobalDataProvider = ({ children }) => {
             const role = String(u?.role || "").toLowerCase();
             const acct = normalizeClientTypeValue(
               u?.account_type ??
-                u?.accountType ??
-                u?.client_type ??
-                u?.clientType ??
-                role,
+              u?.accountType ??
+              u?.client_type ??
+              u?.clientType ??
+              role,
             );
             return (
               ["client", "customer", "saas_client"].includes(role) ||
@@ -1092,10 +1092,10 @@ export const GlobalDataProvider = ({ children }) => {
           .map((u) => {
             const acct = normalizeClientTypeValue(
               u?.account_type ??
-                u?.accountType ??
-                u?.client_type ??
-                u?.clientType ??
-                u?.role,
+              u?.accountType ??
+              u?.client_type ??
+              u?.clientType ??
+              u?.role,
             );
             const mappedType =
               acct ||
@@ -2895,6 +2895,7 @@ export const GlobalDataProvider = ({ children }) => {
 
   const updateOrder = async (orderId, data) => {
     try {
+      console.log(data)
       const numericParam =
         typeof orderId === "string"
           ? orderId.replace(/[^\d]/g, "") || orderId
@@ -2923,7 +2924,7 @@ export const GlobalDataProvider = ({ children }) => {
         setOrders((prev) =>
           prev.map((o) =>
             String(o.id) === String(orderId) ||
-            String(o.id) === String(numericParam)
+              String(o.id) === String(numericParam)
               ? { ...o, status: normalized }
               : o,
           ),
@@ -3345,9 +3346,9 @@ export const GlobalDataProvider = ({ children }) => {
       const orderDateVal =
         isoDateSlice(
           order.order_date ||
-            order.orderDate ||
-            order.date ||
-            order.requestDate,
+          order.orderDate ||
+          order.date ||
+          order.requestDate,
         ) || localDateISO();
       const dueVal = isoDateSlice(order.dueDate || order.due_date || null);
       const orderKindNorm = String(
@@ -3569,7 +3570,7 @@ export const GlobalDataProvider = ({ children }) => {
         (acc, item) =>
           acc +
           parseFloat(item.price || item.unit_price || 0) *
-            parseInt(item.qty || item.quantity || 0),
+          parseInt(item.qty || item.quantity || 0),
         0,
       );
 
@@ -4148,8 +4149,8 @@ export const GlobalDataProvider = ({ children }) => {
         if (!inventoryWriteResponseOk(putRes)) {
           throw new Error(
             putRes?.data?.message ||
-              putRes?.data?.error ||
-              "Inventory update failed.",
+            putRes?.data?.error ||
+            "Inventory update failed.",
           );
         }
       } else {
@@ -4176,8 +4177,8 @@ export const GlobalDataProvider = ({ children }) => {
         if (!inventoryWriteResponseOk(putRes)) {
           throw new Error(
             putRes?.data?.message ||
-              putRes?.data?.error ||
-              "Inventory update failed.",
+            putRes?.data?.error ||
+            "Inventory update failed.",
           );
         }
       }
@@ -4806,7 +4807,7 @@ export const GlobalDataProvider = ({ children }) => {
         vendor_id:
           po.vendorId != null
             ? parseInt(String(po.vendorId).replace(/\D/g, ""), 10) ||
-              po.vendorId
+            po.vendorId
             : po.vendorId,
         vendorId: po.vendorId,
         payment_terms: po.paymentTerms || po.payment_terms || "Net 30",
@@ -5150,10 +5151,10 @@ export const GlobalDataProvider = ({ children }) => {
             chauffeurFee:
               parseFloat(
                 passengerData.chauffeurFee ??
-                  passengerData.chauffeur_fee ??
-                  d.total_amount ??
-                  d.amount ??
-                  0,
+                passengerData.chauffeur_fee ??
+                d.total_amount ??
+                d.amount ??
+                0,
               ) || 0,
             chauffeur_fee_mode: passengerData.chauffeur_fee_mode || "separate",
             numberOfPassengers: passengerData.passengers || 1,
