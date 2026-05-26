@@ -600,11 +600,8 @@ exports.create = async (req, res) => {
 // PUT /api/orders/:id
 exports.update = async (req, res) => {
     try {
+                    // Fields that can be updated via PUT. 'items' and 'deliveryType' are handled specially.
         const allowedFields = [
-            'customer_id',
-            'vendor_id',
-            'type',
-            'items',
             'notes',
             'location',
             'delivery_instructions',
@@ -614,8 +611,19 @@ exports.update = async (req, res) => {
             'client_id',
             'company_id',
             'pickup_location',
-            'pickupLocation'
+            'pickupLocation',
+            'items'
         ];
+
+        // Translate deliveryType (frontend) into a meta block stored in the notes column.
+        if (req.body.deliveryType) {
+            const metaParts = [];
+            metaParts.push(`delivery_mode:${String(req.body.deliveryType).trim()}`);
+            const block = `[request_meta] ${metaParts.join('; ')}`;
+            // Merge with any existing notes payload.
+            req.body.notes = req.body.notes ? `${req.body.notes}\n\n${block}` : block;
+        }
+
         const fkFields = ['customer_id', 'vendor_id', 'client_id', 'company_id'];
         const sets = [];
         const values = [];
